@@ -1,0 +1,7 @@
+pandas 
+altair 
+vega_datasets 
+scikit-learn 
+numpy
+matplotlib
+streamlit
