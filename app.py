@@ -261,7 +261,7 @@ with tab4:
 
 # --- ABA 5: CORRELAÇÕES ---
 with tab5:
-    st.header("Correlograma de Pearson")
+    st.header("Correlação de Pearson")
     
     df_numerico = df_amostra.select_dtypes(include=[np.number])
     df_correlacao = df_numerico.corr(method='pearson').stack().reset_index()
