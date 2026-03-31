@@ -373,8 +373,14 @@ with tab6:
             tooltip=['total_distraction_hours', 'productivity_score', 'is_distraction_outlier']
         ).properties(height=350)
         
-        # Linha vertical representando o limite do Outlier
-        limite_outlier = Q3 + 1.5 * IQR
+        # --- CORREÇÃO AQUI ---
+        # Recalculando os limites do Boxplot para usar no gráfico
+        Q1_calc = df_amostra['total_distraction_hours'].quantile(0.25)
+        Q3_calc = df_amostra['total_distraction_hours'].quantile(0.75)
+        IQR_calc = Q3_calc - Q1_calc
+        limite_outlier = Q3_calc + 1.5 * IQR_calc
+        # ---------------------
+        
         rule_outlier = alt.Chart(pd.DataFrame({'x': [limite_outlier]})).mark_rule(color='red', strokeDash=[2,2]).encode(x='x:Q')
         
         st.altair_chart(jitter + rule_outlier, use_container_width=True)
