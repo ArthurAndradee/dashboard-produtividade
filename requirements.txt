@@ -1,7 +1,7 @@
-pandas 
-altair 
+altair>=5.0.0
 vega_datasets 
 scikit-learn 
-numpy
 matplotlib
-streamlit
+streamlit>=1.35.0
+pandas
+numpy
