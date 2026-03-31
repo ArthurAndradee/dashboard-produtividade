@@ -362,25 +362,33 @@ with tab6:
     with col_d:
         st.subheader("Outliers de Distração (Alerta Vermelho)")
         st.markdown("*Alunos destacados em vermelho ultrapassam o limite estatístico aceitável (Método IQR).*")
-        jitter = alt.Chart(df_amostra).mark_circle(size=30, opacity=0.7).encode(
-            x=alt.X('total_distraction_hours:Q', title='Horas Totais de Distração (Todas as telas)'),
-            y=alt.Y('productivity_quartile:N', title='Quartil de Produtividade'),
-            color=alt.condition(
-                alt.datum.is_distraction_outlier == True, 
-                alt.value('#e74c3c'), # Vermelho para outliers
-                alt.value('#bdc3c7')  # Cinza para o resto
-            ),
-            tooltip=['total_distraction_hours', 'productivity_score', 'is_distraction_outlier']
-        ).properties(height=350)
         
-        # --- CORREÇÃO AQUI ---
-        # Recalculando os limites do Boxplot para usar no gráfico
+        # Recalculando os limites estatísticos (IQR)
         Q1_calc = df_amostra['total_distraction_hours'].quantile(0.25)
         Q3_calc = df_amostra['total_distraction_hours'].quantile(0.75)
         IQR_calc = Q3_calc - Q1_calc
         limite_outlier = Q3_calc + 1.5 * IQR_calc
-        # ---------------------
+
+        # Gráfico de Dispersão usando o Score Contínuo no eixo Y
+        scatter_outliers = alt.Chart(df_amostra).mark_circle(size=60, opacity=0.5).encode(
+            x=alt.X('total_distraction_hours:Q', title='Horas Totais de Distração (Todas as telas)'),
+            # Mudança aqui: Usando a nota contínua para espalhar os pontos
+            y=alt.Y('productivity_score:Q', title='Score de Produtividade', scale=alt.Scale(zero=False)),
+            color=alt.condition(
+                alt.datum.total_distraction_hours > limite_outlier, # Avalia o limite diretamente
+                alt.value('#e74c3c'), # Vermelho vivo para os outliers
+                alt.value('#95a5a6')  # Cinza neutro para os alunos dentro do padrão
+            ),
+            tooltip=[
+                alt.Tooltip('total_distraction_hours', title='Horas de Distração'), 
+                alt.Tooltip('productivity_score', title='Score de Produtividade')
+            ]
+        ).properties(height=350)
         
-        rule_outlier = alt.Chart(pd.DataFrame({'x': [limite_outlier]})).mark_rule(color='red', strokeDash=[2,2]).encode(x='x:Q')
+        # Linha vertical pontilhada indicando onde começa a zona de Outlier
+        rule_outlier = alt.Chart(pd.DataFrame({'x': [limite_outlier]})).mark_rule(
+            color='red', strokeDash=[4,4], size=2
+        ).encode(x='x:Q')
         
-        st.altair_chart(jitter + rule_outlier, use_container_width=True)
+        # Juntando o gráfico de pontos com a linha de limite
+        st.altair_chart(scatter_outliers + rule_outlier, use_container_width=True)
