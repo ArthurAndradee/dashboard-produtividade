@@ -18,7 +18,7 @@ def load_and_process_data():
     # Substitua pelo caminho correto caso não esteja na mesma pasta
     df = pd.read_csv('student_productivity_distraction_dataset_20000.csv')
     
-    # Adicionando as colunas calculadas que você usou na Etapa 2.4
+    # Colunas Calculadas Originais
     df['total_distraction_hours'] = (
         df['phone_usage_hours'] + df['social_media_hours'] + 
         df['youtube_hours'] + df['gaming_hours']
@@ -33,6 +33,34 @@ def load_and_process_data():
         labels=['1º Quartil (Menos Produtivos)', '2º Quartil', '3º Quartil', '4º Quartil (Mais Produtivos)']
     )
 
+    # ==========================================
+    # NOVAS COLUNAS CALCULADAS (INSIGHTS AVANÇADOS)
+    # ==========================================
+    # Evitando divisão por zero nas horas
+    df['sleep_hours_safe'] = df['sleep_hours'].replace(0, 0.1)
+    df['study_hours_safe'] = df['study_hours_per_day'].replace(0, 0.1)
+
+    # 1. Risco de Burnout
+    df['burnout_risk_score'] = (df['stress_level'] * df['study_hours_per_day']) / df['sleep_hours_safe']
+    
+    # 2. Eficiência de Estudo
+    df['study_efficiency'] = df['productivity_score'] / df['study_hours_safe']
+
+    # 3. Perfil de Distração Múltipla
+    df['social_load'] = df['phone_usage_hours'] + df['social_media_hours']
+    df['media_load'] = df['youtube_hours'] + df['gaming_hours']
+    
+    # 4. Outliers de Distração (Método IQR)
+    Q1 = df['total_distraction_hours'].quantile(0.25)
+    Q3 = df['total_distraction_hours'].quantile(0.75)
+    IQR = Q3 - Q1
+    df['is_distraction_outlier'] = df['total_distraction_hours'] > (Q3 + 1.5 * IQR)
+
+    # 5. Equilíbrio 24h (Outras Atividades)
+    df['other_activities_hours'] = 24 - (df['study_hours_per_day'] + df['sleep_hours'] + df['total_distraction_hours'])
+    df['other_activities_hours'] = df['other_activities_hours'].clip(lower=0) # Garante que não haja valores negativos
+
+    # ==========================================
     # 2. Gerando Amostras
     df_pop = df.copy()
     df_pop['Método'] = '01. População (20000)'
@@ -95,13 +123,14 @@ df_original, df_amostra, df_ranking = load_and_process_data()
 st.title("📊 Dashboard: Produtividade e Distrações de Estudantes")
 st.markdown("Análise baseada em técnicas de amostragem e visualizações interativas com Altair.")
 
-# Criando abas para organizar o dashboard
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# Criando abas para organizar o dashboard (Adicionada aba 6)
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🛠️ Amostragem e Dados", 
     "🏃 Hábitos Diários", 
     "📱 Distrações", 
     "🎓 Desempenho Acadêmico", 
-    "🔗 Correlações"
+    "🔗 Correlações",
+    "🚀 Insights Avançados"
 ])
 
 # --- ABA 1: AMOSTRAGEM ---
@@ -275,3 +304,77 @@ with tab5:
     ).properties(height=600)
 
     st.altair_chart(matriz_correlacao, use_container_width=True)
+
+# --- ABA 6: INSIGHTS AVANÇADOS ---
+with tab6:
+    st.header("Insights Avançados e Métricas Complexas")
+    st.markdown("Cruzamentos profundos sobre eficiência de estudo, limites de exaustão e perfis de distração.")
+
+    # Linha 1: Eficiência e Burnout
+    col_a, col_b = st.columns(2)
+    
+    with col_a:
+        st.subheader("Eficiência de Estudo (ROI do Tempo)")
+        st.markdown("*Acima da linha vermelha horizontal indica alunos que rendem mais que a média.*")
+        scatter_eff = alt.Chart(df_amostra).mark_circle(size=60, opacity=0.6).encode(
+            x=alt.X('study_hours_per_day:Q', title='Horas de Estudo/Dia'),
+            y=alt.Y('productivity_score:Q', title='Score de Produtividade'),
+            color=alt.Color('study_efficiency:Q', scale=alt.Scale(scheme='viridis'), title='Eficiência (Score/Hora)'),
+            tooltip=['study_hours_per_day', 'productivity_score', alt.Tooltip('study_efficiency', format='.2f')]
+        ).properties(height=350)
+
+        x_mean = df_amostra['study_hours_per_day'].mean()
+        y_mean = df_amostra['productivity_score'].mean()
+        hline = alt.Chart(pd.DataFrame({'y': [y_mean]})).mark_rule(color='red', strokeDash=[5,5]).encode(y='y:Q')
+        vline = alt.Chart(pd.DataFrame({'x': [x_mean]})).mark_rule(color='red', strokeDash=[5,5]).encode(x='x:Q')
+        st.altair_chart(scatter_eff + hline + vline, use_container_width=True)
+
+    with col_b:
+        st.subheader("Mapa de Calor: Risco de Burnout")
+        st.markdown("*Estresse alto e pouco sono destroem a produtividade (cores quentes = menor rendimento).*")
+        heatmap_burnout = alt.Chart(df_amostra).mark_rect().encode(
+            x=alt.X('sleep_hours:Q', bin=alt.Bin(maxbins=8), title='Horas de Sono'),
+            y=alt.Y('stress_level:Q', bin=alt.Bin(maxbins=8), title='Nível de Estresse'),
+            color=alt.Color('mean(productivity_score):Q', scale=alt.Scale(scheme='redyellowgreen', reverse=True), title='Produtividade Média'),
+            tooltip=['sleep_hours', 'stress_level', 'mean(productivity_score)', 'count()']
+        ).properties(height=350)
+        st.altair_chart(heatmap_burnout, use_container_width=True)
+
+    st.divider()
+
+    # Linha 2: Equilíbrio e Outliers
+    col_c, col_d = st.columns(2)
+
+    with col_c:
+        st.subheader("Onde o tempo é gasto? (Ciclo de 24h)")
+        df_24h = df_amostra[['productivity_quartile', 'study_hours_per_day', 'sleep_hours', 'total_distraction_hours', 'other_activities_hours']].copy()
+        df_24h.columns = ['Quartil', 'Estudo', 'Sono', 'Distrações (Telas)', 'Outras Atividades Livres']
+        df_24h_melt = df_24h.melt(id_vars='Quartil', var_name='Atividade', value_name='Horas')
+        
+        bar_24h = alt.Chart(df_24h_melt).mark_bar().encode(
+            x=alt.X('Quartil:N', title='Nível de Produtividade'),
+            y=alt.Y('mean(Horas):Q', stack='normalize', title='Proporção do Dia (24h)', axis=alt.Axis(format='%')),
+            color=alt.Color('Atividade:N', scale=alt.Scale(scheme='set2')),
+            tooltip=['Atividade', alt.Tooltip('mean(Horas)', format='.1f', title='Média de Horas')]
+        ).properties(height=350)
+        st.altair_chart(bar_24h, use_container_width=True)
+
+    with col_d:
+        st.subheader("Outliers de Distração (Alerta Vermelho)")
+        st.markdown("*Alunos destacados em vermelho ultrapassam o limite estatístico aceitável (Método IQR).*")
+        jitter = alt.Chart(df_amostra).mark_circle(size=30, opacity=0.7).encode(
+            x=alt.X('total_distraction_hours:Q', title='Horas Totais de Distração (Todas as telas)'),
+            y=alt.Y('productivity_quartile:N', title='Quartil de Produtividade'),
+            color=alt.condition(
+                alt.datum.is_distraction_outlier == True, 
+                alt.value('#e74c3c'), # Vermelho para outliers
+                alt.value('#bdc3c7')  # Cinza para o resto
+            ),
+            tooltip=['total_distraction_hours', 'productivity_score', 'is_distraction_outlier']
+        ).properties(height=350)
+        
+        # Linha vertical representando o limite do Outlier
+        limite_outlier = Q3 + 1.5 * IQR
+        rule_outlier = alt.Chart(pd.DataFrame({'x': [limite_outlier]})).mark_rule(color='red', strokeDash=[2,2]).encode(x='x:Q')
+        
+        st.altair_chart(jitter + rule_outlier, use_container_width=True)
